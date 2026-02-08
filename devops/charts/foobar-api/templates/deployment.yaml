@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "foobar-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "foobar-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "foobar-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "foobar-api.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+        - name: init-copy-certs
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eo pipefail
+              echo "Copying certs from secret to PVC..."
+              mkdir -p {{ .Values.certs.mountPath }}
+              cp /tls/{{ .Values.tlsSecret.crtKey }} {{ .Values.certs.mountPath }}/{{ .Values.certs.certFilename }}
+              cp /tls/{{ .Values.tlsSecret.keyKey }} {{ .Values.certs.mountPath }}/{{ .Values.certs.keyFilename }}
+              chmod 755 {{ .Values.certs.mountPath }}/{{ .Values.certs.keyFilename }}
+              echo "Done."
+          volumeMounts:
+            - name: tls-secret
+              mountPath: /tls
+              readOnly: true
+            - name: certs-pvc
+              mountPath: {{ .Values.certs.mountPath }}
+      containers:
+        - name: {{ include "foobar-api.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "-port={{ .Values.service.targetPort }}"
+          ports:
+            - name: https
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: certs-pvc
+              mountPath: {{ .Values.certs.mountPath }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tls-secret
+          secret:
+            secretName: {{ include "foobar-api.tlsSecretName" . }}
+        - name: certs-pvc
+          persistentVolumeClaim:
+            claimName: {{ include "foobar-api.fullname" . }}-certs
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

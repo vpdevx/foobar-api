@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "foobar-api.fullname" . }}-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "foobar-api.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "foobar-api.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: https
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
