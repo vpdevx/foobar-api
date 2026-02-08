@@ -28,7 +28,6 @@ tlsSecret:
   crtFile: ""
   keyFile: ""
 
-# Caminho final no PVC onde o app espera encontrar os arquivos
 certs:
   mountPath: /cert
   certFilename: cert.pem
